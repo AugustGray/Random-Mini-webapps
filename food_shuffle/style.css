@@ -104,10 +104,6 @@ body {
     aspect-ratio: 3 / 1; /* Prevents squareness */
     margin-top: 10px;
   }
-
-  #buttons-container a {
-    text-decoration: none;
-  }
   
   button:hover {
     background-color: var(--primary);
