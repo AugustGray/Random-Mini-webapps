@@ -1,647 +1,470 @@
 <!DOCTYPE html>
-<html lang="en" class="transition-colors duration-300">
+<html lang="en" class="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Participant & Subject Randomizer</title>
+    <title>Randomizer & Pair Generator</title>
+    
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Tailwind Config for Custom Palette -->
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
-                        gray: {
-                            750: '#2d3748',
-                            850: '#1a202c',
-                            900: '#212428', // Background color
-                            950: '#0d1117',
+                        // Custom Palette Definition
+                        page: {
+                            light: '#CED2D9',
+                            dark: '#212428',
+                        },
+                        surface: {
+                            light: '#E0E5EC',
+                            dark: '#464D56',
+                        },
+                        txt: {
+                            primary: { light: '#212428', dark: '#E0E5EC' },
+                            secondary: { light: '#464D56', dark: '#CED2D9' },
+                        },
+                        accent: {
+                            light: '#44A0D1',
+                            dark: '#54C1FB',
+                        },
+                        btn: {
+                            add: '#44A0D1',
+                            addHover: '#368bc1',
+                            shuffle: '#5AC549',
+                            shuffleHover: '#49a33b'
                         }
                     }
                 }
             }
         }
     </script>
-    <!-- FontAwesome for icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- React and ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-page-light dark:bg-page-dark text-txt-primary-light dark:text-txt-primary-dark transition-colors duration-300 font-sans">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Helper to shuffle an array (Fisher-Yates)
+        const shuffleArray = (array) => {
+            let arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        };
+
+        // Helper to parse "Name #Tag"
+        const parseItem = (text) => {
+            if (!text.includes('#')) {
+                return { name: text, tag: null };
+            }
+            const parts = text.split('#');
+            const name = parts[0].trim();
+            const tag = parts.slice(1).join('#').trim(); 
+            return { 
+                name: name || '(Empty Name)', 
+                tag: tag || null 
+            };
+        };
+
+        function App() {
+            // State
+            const [inputValue, setInputValue] = useState('');
+            const [participants, setParticipants] = useState([]);
+            const [subjects, setSubjects] = useState([]);
+            const [results, setResults] = useState([]);
+            const [isDarkMode, setIsDarkMode] = useState(false);
+            
+            // Mode State
+            const [isPairingMode, setIsPairingMode] = useState(false);
+            const [activeTab, setActiveTab] = useState('participants'); 
+
+            // Initialize theme
+            useEffect(() => {
+                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    setIsDarkMode(true);
+                }
+            }, []);
+
+            // Apply theme
+            useEffect(() => {
+                const html = document.documentElement;
+                if (isDarkMode) {
+                    html.classList.add('dark');
+                    html.classList.remove('light');
+                } else {
+                    html.classList.remove('dark');
+                    html.classList.add('light');
+                }
+            }, [isDarkMode]);
+
+            // Reset results when mode changes
+            useEffect(() => {
+                setResults([]);
+                if (!isPairingMode) {
+                    setActiveTab('participants');
+                }
+            }, [isPairingMode]);
+
+            const handleAdd = () => {
+                if (!inputValue.trim()) return;
+                
+                const val = inputValue.trim();
+                
+                if (activeTab === 'participants') {
+                    setParticipants([...participants, val]);
+                } else {
+                    setSubjects([...subjects, val]);
+                }
+                setInputValue('');
+            };
+
+            const handleKeyDown = (e) => {
+                if (e.key === 'Enter') {
+                    handleAdd();
+                }
+            };
+
+            const handleRemove = (index, listType) => {
+                if (listType === 'participants') {
+                    setParticipants(participants.filter((_, i) => i !== index));
+                } else {
+                    setSubjects(subjects.filter((_, i) => i !== index));
+                }
+            };
+
+            const handleShuffle = () => {
+                if (isPairingMode) {
+                    const pShuffled = shuffleArray(participants).map(p => parseItem(p));
+                    const sShuffled = shuffleArray(subjects);
+
+                    const maxLen = Math.max(pShuffled.length, sShuffled.length);
+                    const pairResults = [];
+
+                    for(let i = 0; i < maxLen; i++) {
+                        pairResults.push({
+                            participant: pShuffled[i] ? pShuffled[i].name : '(No Participant)',
+                            pTag: pShuffled[i] ? pShuffled[i].tag : null,
+                            subject: sShuffled[i] || '(No Subject)',
+                            type: 'pair'
+                        });
+                    }
+                    setResults(pairResults);
+
+                } else {
+                    const parsedItems = participants.map(p => parseItem(p));
+                    
+                    const groups = {};
+                    parsedItems.forEach(item => {
+                        const key = item.tag || '___untagged___';
+                        if (!groups[key]) groups[key] = [];
+                        groups[key].push(item);
+                    });
+
+                    const groupKeys = Object.keys(groups);
+                    const shuffledKeys = shuffleArray(groupKeys);
+
+                    let finalResults = [];
+                    
+                    shuffledKeys.forEach(key => {
+                        const itemsInGroup = groups[key];
+                        const shuffledItems = shuffleArray(itemsInGroup);
+                        finalResults = [...finalResults, ...shuffledItems];
+                    });
+
+                    setResults(finalResults.map(item => ({ 
+                        name: item.name, 
+                        tag: item.tag,
+                        type: 'simple' 
+                    })));
+                }
+            };
+
+            const handleClear = () => {
+                if(confirm('Are you sure you want to clear all lists and results?')) {
+                    setParticipants([]);
+                    setSubjects([]);
+                    setResults([]);
+                }
+            };
+
+            // Helpers for UI
+            const currentList = activeTab === 'participants' ? participants : subjects;
+            
+            let inputPlaceholder = '';
+            if (activeTab === 'subjects') {
+                inputPlaceholder = 'Enter subject name...';
+            } else {
+                inputPlaceholder = 'Enter name (e.g. John or John #TeamA)';
+            }
+
+            const canShuffle = isPairingMode 
+                ? (participants.length > 0 && subjects.length > 0)
+                : (participants.length > 1);
+
+            return (
+                <div className="flex flex-col h-screen overflow-hidden">
+                    {/* Header */}
+                    <header className="p-4 bg-surface-light dark:bg-surface-dark shadow-md z-10 border-b border-gray-300 dark:border-gray-600">
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                            <h1 className="text-xl font-bold text-accent-light dark:text-accent-dark tracking-wide">
+                                {isPairingMode ? 'Pairing Generator' : 'Randomizer'}
+                            </h1>
+                            
+                            <div className="flex items-center gap-4">
+                                {/* Mode Toggle */}
+                                <div className="flex items-center gap-2 bg-page-light dark:bg-page-dark p-1 rounded-lg border border-gray-300 dark:border-gray-600">
+                                    <span className={`text-xs font-semibold px-2 ${!isPairingMode ? 'text-accent-light dark:text-accent-dark' : 'text-txt-secondary-light dark:text-txt-secondary-dark'}`}>Sort</span>
+                                    <button 
+                                        onClick={() => setIsPairingMode(!isPairingMode)}
+                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isPairingMode ? 'bg-accent-light dark:bg-accent-dark' : 'bg-gray-400 dark:bg-gray-600'}`}
+                                    >
+                                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isPairingMode ? 'translate-x-6' : 'translate-x-1'}`} />
+                                    </button>
+                                    <span className={`text-xs font-semibold px-2 ${isPairingMode ? 'text-accent-light dark:text-accent-dark' : 'text-txt-secondary-light dark:text-txt-secondary-dark'}`}>Pair</span>
+                                </div>
+
+                                <button 
+                                    onClick={handleClear}
+                                    className="text-sm text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium px-3 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition"
+                                >
+                                    Clear All
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Main Content */}
+                    <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-page-light dark:bg-page-dark">
+                        <div className="max-w-6xl mx-auto h-full grid grid-cols-1 md:grid-cols-2 gap-6">
+                            
+                            {/* Column 1: Inputs */}
+                            <div className="bg-surface-light dark:bg-surface-dark rounded-xl shadow-lg flex flex-col h-full overflow-hidden border border-white/50 dark:border-gray-600">
+                                
+                                {/* Tabs Header */}
+                                {isPairingMode ? (
+                                    <div className="flex border-b border-gray-300 dark:border-gray-600">
+                                        <button
+                                            onClick={() => setActiveTab('participants')}
+                                            className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === 'participants' 
+                                                ? 'bg-page-light dark:bg-page-dark text-accent-light dark:text-accent-dark border-b-2 border-accent-light dark:border-accent-dark' 
+                                                : 'text-txt-secondary-light dark:text-txt-secondary-dark hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                                        >
+                                            <i className="fas fa-users mr-2"></i> Participants ({participants.length})
+                                        </button>
+                                        <button
+                                            onClick={() => setActiveTab('subjects')}
+                                            className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === 'subjects' 
+                                                ? 'bg-page-light dark:bg-page-dark text-purple-500 dark:text-purple-400 border-b-2 border-purple-500' 
+                                                : 'text-txt-secondary-light dark:text-txt-secondary-dark hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                                        >
+                                            <i className="fas fa-book mr-2"></i> Subjects ({subjects.length})
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="p-4 border-b border-gray-300 dark:border-gray-600">
+                                        <h2 className="text-lg font-semibold text-txt-primary-light dark:text-txt-primary-dark flex items-center gap-2">
+                                            <i className="fas fa-users text-accent-light dark:text-accent-dark"></i> Participants List
+                                        </h2>
+                                        <p className="text-xs text-txt-secondary-light dark:text-txt-secondary-dark mt-1">
+                                            Tip: Add tags with # (e.g. "John #TeamA") to group them.
+                                        </p>
+                                    </div>
+                                )}
+                                
+                                {/* List Content */}
+                                <div className="flex-1 overflow-y-auto p-4 space-y-2 pr-2 custom-scrollbar">
+                                    {currentList.length === 0 ? (
+                                        <div className="text-center text-txt-secondary-light dark:text-txt-secondary-dark mt-10 italic opacity-70">
+                                            No {activeTab} yet.<br/>Add using the input below.
+                                        </div>
+                                    ) : (
+                                        currentList.map((rawItem, index) => {
+                                            const { name, tag } = parseItem(rawItem);
+                                            return (
+                                                <div key={index} className="group flex justify-between items-center p-3 bg-white dark:bg-[#3b424a] rounded-lg shadow-sm border border-transparent hover:border-accent-light dark:hover:border-accent-dark transition-colors">
+                                                    <div className="flex items-center gap-2 overflow-hidden">
+                                                        <span className="truncate font-medium text-txt-primary-light dark:text-txt-primary-dark">{name}</span>
+                                                        {tag && (
+                                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent-light/10 text-accent-light dark:text-accent-dark border border-accent-light/30 shrink-0">
+                                                                #{tag}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => handleRemove(index, activeTab)}
+                                                        className="opacity-0 group-hover:opacity-100 text-txt-secondary-light dark:text-txt-secondary-dark hover:text-red-500 transition-opacity p-1 shrink-0"
+                                                    >
+                                                        <i className="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Column 2: Results */}
+                            <div className="bg-surface-light dark:bg-surface-dark rounded-xl shadow-lg p-4 flex flex-col h-full border border-white/50 dark:border-gray-600">
+                                <h2 className="text-lg font-semibold mb-4 pb-2 border-b border-gray-300 dark:border-gray-600 text-txt-primary-light dark:text-txt-primary-dark flex items-center gap-2">
+                                    <i className="fas fa-list-ol text-btn-shuffle"></i> 
+                                    {isPairingMode ? 'Paired Results' : 'Final Order'}
+                                </h2>
+
+                                <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                                    {results.length === 0 ? (
+                                        <div className="text-center text-txt-secondary-light dark:text-txt-secondary-dark mt-10 italic opacity-70">
+                                            Click shuffle to see results.
+                                        </div>
+                                    ) : (
+                                        results.map((item, index) => (
+                                            <div key={index} className="animate-fade-in">
+                                                {item.type === 'simple' ? (
+                                                    // Simple List Item
+                                                    <div className="flex items-center p-3 bg-white dark:bg-[#3b424a] rounded-lg shadow-sm border-l-4 border-accent-light dark:border-accent-dark">
+                                                        <div className="w-8 h-8 rounded-full bg-accent-light dark:bg-accent-dark text-white flex items-center justify-center font-bold text-sm shadow-sm shrink-0 mr-3">
+                                                            {index + 1}
+                                                        </div>
+                                                        <div className="flex-1 flex items-center gap-2 overflow-hidden">
+                                                            <span className="truncate font-medium text-txt-primary-light dark:text-txt-primary-dark">{item.name}</span>
+                                                            {item.tag && (
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 dark:bg-gray-700 text-accent-light dark:text-accent-dark border border-gray-200 dark:border-gray-600 shrink-0">
+                                                                    #{item.tag}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    // Paired Item Card
+                                                    <div className="flex items-stretch bg-white dark:bg-[#3b424a] rounded-lg shadow-sm overflow-hidden">
+                                                        <div className="w-10 bg-accent-light dark:bg-accent-dark text-white flex items-center justify-center font-bold text-sm">
+                                                            {index + 1}
+                                                        </div>
+                                                        <div className="flex-1 p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 overflow-hidden">
+                                                            <div className="flex-1 flex items-center gap-2 overflow-hidden">
+                                                                <i className="fas fa-user text-txt-secondary-light dark:text-txt-secondary-dark text-xs shrink-0"></i>
+                                                                <span className="font-medium truncate text-txt-primary-light dark:text-txt-primary-dark">{item.participant}</span>
+                                                                {item.pTag && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 dark:bg-gray-700 text-txt-secondary-light dark:text-txt-secondary-dark shrink-0">
+                                                                        #{item.pTag}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div className="hidden sm:block text-txt-secondary-light dark:text-txt-secondary-dark">
+                                                                <i className="fas fa-arrow-right"></i>
+                                                            </div>
+                                                            <div className="flex-1 flex items-center gap-2 text-purple-600 dark:text-purple-400 overflow-hidden">
+                                                                <i className="fas fa-book text-xs opacity-70 shrink-0"></i>
+                                                                <span className="font-semibold truncate">{item.subject}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+
+                    {/* Footer - Input Area */}
+                    <footer className="bg-surface-light dark:bg-surface-dark border-t border-gray-300 dark:border-gray-600 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
+                        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row gap-3">
+                            <div className="flex-1 relative">
+                                <span className="absolute left-3 top-3.5 text-txt-secondary-light dark:text-txt-secondary-dark">
+                                    {activeTab === 'participants' ? <i className="fas fa-user"></i> : <i className="fas fa-book"></i>}
+                                </span>
+                                <input
+                                    type="text"
+                                    value={inputValue}
+                                    onChange={(e) => setInputValue(e.target.value)}
+                                    onKeyDown={handleKeyDown}
+                                    placeholder={inputPlaceholder}
+                                    className="w-full pl-9 pr-4 py-3 rounded-lg border border-gray-300 dark:border-gray-500 bg-white dark:bg-[#3b424a] text-txt-primary-light dark:text-txt-primary-dark placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-light dark:focus:ring-accent-dark transition-all"
+                                />
+                            </div>
+                            
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleAdd}
+                                    className="px-6 py-3 bg-btn-add hover:bg-btn-addHover text-white font-semibold rounded-lg shadow-sm hover:shadow transition-all flex items-center gap-2 whitespace-nowrap active:scale-95"
+                                >
+                                    <i className="fas fa-plus"></i> Add
+                                </button>
+                                
+                                <button
+                                    onClick={handleShuffle}
+                                    disabled={!canShuffle}
+                                    className={`px-6 py-3 font-semibold rounded-lg shadow-sm transition-all flex items-center gap-2 whitespace-nowrap active:scale-95 ${
+                                        !canShuffle
+                                        ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 cursor-not-allowed' 
+                                        : 'bg-btn-shuffle hover:bg-btn-shuffleHover text-white hover:shadow'
+                                    }`}
+                                >
+                                    <i className="fas fa-random"></i> Shuffle
+                                </button>
+
+                                <button
+                                    onClick={() => setIsDarkMode(!isDarkMode)}
+                                    className="px-4 py-3 bg-page-light dark:bg-page-dark hover:bg-gray-300 dark:hover:bg-gray-700 text-txt-primary-light dark:text-txt-primary-dark rounded-lg shadow-sm transition-all active:scale-95 border border-gray-300 dark:border-gray-600"
+                                    title="Toggle Theme"
+                                >
+                                    {isDarkMode ? <i className="fas fa-sun"></i> : <i className="fas fa-moon"></i>}
+                                </button>
+                            </div>
+                        </div>
+                    </footer>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+    
     <style>
-        /* Animation for list items */
+        /* Animation for results */
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(5px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        
-        html { scroll-behavior: smooth; }
-
-        /* Custom scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background-color: #cbd5e0; border-radius: 20px; }
-        .dark ::-webkit-scrollbar-thumb { background-color: #212428; }
-
-        /* Toggle Switch Styles */
-        .toggle-checkbox:checked {
-            right: 0;
-            border-color: #68D391;
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
         }
-        .toggle-checkbox:checked + .toggle-label {
-            background-color: #68D391;
+        
+        /* Custom scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(156, 163, 175, 0.5);
+            border-radius: 20px;
+        }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(75, 85, 99, 0.5);
         }
     </style>
-    <style>
-    /* Animation for list items */
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    
-    html { scroll-behavior: smooth; }
-
-    /* Custom scrollbar */
-    ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    /* Updated scrollbar thumb to use variables */
-    ::-webkit-scrollbar-thumb { background-color: var(--color-border-input); border-radius: 20px; }
-    .dark ::-webkit-scrollbar-thumb { background-color: var(--color-bg-body); }
-
-    /* Toggle Switch Styles */
-    .toggle-checkbox:checked {
-        right: 0;
-        border-color: var(--color-success-toggle);
-    }
-    .toggle-checkbox:checked + .toggle-label {
-        background-color: var(--color-success-toggle);
-    }
-
-    /* --- CSS Variables for Theming --- */
-    :root {
-        /* Light Theme Colors */
-        --color-bg-body: #CED2D9;
-        --color-surface: #E0E5EC;
-        --color-primary-default: #44A0D1;
-        --color-primary-darker: #4338ca;
-        --color-shuffle-default: #54C549;
-        --color-success-toggle: #68d391;
-        --color-text-default: #1f2937;
-        --color-text-secondary: #6b7280;
-        --color-text-input-placeholder: #9ca3af;
-        --color-border-default: #e5e7eb;
-        --color-border-input: #d1d5db;
-        --color-button-primary: #44a0d1;
-        --color-button-secondary: #e5e7eb;
-        /* Tabs */
-        --color-tab-accent: #44A0D1; /* indigo-500 for active border */
-        --color-tab-hover: #4b5563; /* gray-700 for inactive hover */
-        --color-rank-1-bg: #fffbe9;
-        --color-rank-1-text: #b45309;
-        --color-rank-2-bg: #f9fafb;
-        --color-rank-2-border: #d1d5db;
-        --color-rank-3-bg: #fff7ed;
-        --color-rank-3-text: #9a3412;
-    }
-
-    /* Dark Theme Colors */
-    .dark {
-        --color-bg-body: #212428; 
-        --color-surface: #464D56;
-        --color-surface-input: #212428;
-        --color-surface-result-card: #2d3748;
-        --color-primary-default: #54c1fb;
-        --color-primary-darker: #818cf8;
-        --color-shuffle-default: #5ac549;
-        --color-text-default: #f3f4f6;
-        --color-text-secondary: #9ca3af;
-        --color-text-input-placeholder: #6b7280;
-        --color-theme-toggle-icon: #facc15;
-        --color-border-default: #374151;
-        --color-border-input: #4b5563;
-        --color-button-primary: #44a0d1;
-        --color-button-secondary: #374151;
-        /* Tabs */
-        --color-tab-accent: #54c1fb; /* indigo-500 for active border */
-        --color-tab-hover: #e5e7eb; /* gray-200 for inactive hover */
-        --color-rank-1-bg: #4c1d95;
-        --color-rank-1-text: #fcd34d;
-        --color-rank-2-bg: #4b5563;
-        --color-rank-2-text: #f3f4f6;
-        --color-rank-3-bg: #7c2d12;
-        --color-rank-3-text: #fed7aa;
-    }
-
-    /* --- Variable-Based Utility Classes --- */
-
-    /* Backgrounds */
-    .bg-main { background-color: var(--color-bg-body); }
-    .bg-surface { background-color: var(--color-surface); }
-    .bg-surface-alt { background-color: var(--color-surface); } /* For dark mode tab bg: gray-800/50 is now just surface */
-    .dark .bg-surface-alt { background-color: var(--color-surface); }
-
-    /* Text */
-    .text-default { color: var(--color-text-default); }
-    .text-secondary { color: var(--color-text-secondary); }
-    .text-primary-accent { color: var(--color-primary-default); }
-
-    /* Borders */
-    .border-default { border-color: var(--color-border-default); }
-
-    /* Buttons */
-    .btn-primary { 
-        background-color: var(--color-button-primary); 
-        color: white; 
-    }
-    .btn-primary:hover { 
-        background-color: color-mix(in srgb, var(--color-button-primary) 85%, black); 
-    }
-
-    .btn-shuffle { 
-        background-color: var(--color-shuffle-default); 
-        color: white; 
-    }
-    .btn-shuffle:hover { 
-        background-color: color-mix(in srgb, var(--color-shuffle-default) 85%, black);
-    }
-    
-    .btn-toggle-theme {
-        background-color: var(--color-button-secondary);
-        color: var(--color-text-default);
-    }
-    .btn-toggle-theme:hover {
-        background-color: color-mix(in srgb, var(--color-button-secondary) 85%, black);
-    }
-    .dark .btn-toggle-theme {
-        background-color: var(--color-button-secondary);
-        color: var(--color-theme-toggle-icon);
-    }
-
-    /* Input & Labels */
-    .input-base {
-        background-color: var(--color-bg-body);
-        border-color: var(--color-border-input);
-        color: var(--color-text-default);
-    }
-    .input-base::placeholder {
-        color: var(--color-text-input-placeholder);
-    }
-    .dark .input-base {
-        background-color: var(--color-surface-input);
-        border-color: var(--color-border-input);
-    }
-
-    .input-label-base {
-        color: var(--color-text-input-placeholder);
-        border: 1px solid var(--color-border-input);
-        background-color: var(--color-bg-body); /* Subtle contrast */
-    }
-
-    /* --- Tab Utility Classes --- */
-
-    /* Active Tab */
-    .tab-active {
-        border-color: var(--color-tab-accent);
-        color: var(--color-primary-default);
-        background-color: var(--color-surface);
-    }
-
-    /* Inactive Tab */
-    .tab-inactive {
-        border-color: transparent;
-        color: var(--color-text-secondary);
-    }
-    .tab-inactive:hover {
-        color: var(--color-tab-hover);
-    }
-    .dark .tab-inactive:hover {
-        color: var(--color-text-default);
-    }
-</style>
-</head>
-<body class="bg-main text-default font-sans h-screen flex flex-col overflow-hidden transition-colors duration-300">
-
-    <!-- Header -->
-    <header class="bg-surface shadow-sm z-10 transition-colors duration-300 border-b border-default">
-        <div class="max-w-6xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
-            
-            <!-- Title -->
-            <h1 class="text-xl font-bold text-primary-accent flex items-center">
-                <i class="fa-solid fa-dice mr-2"></i>Randomizer
-            </h1>
-
-            <!-- Controls -->
-            <div class="flex items-center space-x-6">
-                
-                <!-- Pairing Mode Toggle -->
-                <div class="flex items-center">
-                    <span class="mr-2 text-sm font-medium text-secondary">Subject Pairing</span>
-                    <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
-                        <input type="checkbox" name="toggle" id="mode-toggle" onchange="togglePairingMode()" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer border-gray-300 transition-all duration-300 left-0 checked:left-4 z-10"/>
-                        <label for="mode-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer transition-colors duration-300"></label>
-                    </div>
-                </div>
-
-                <button onclick="resetAll()" class="text-sm text-secondary hover:text-red-500 dark:hover:text-red-400 transition-colors font-medium">
-                    Reset All
-                </button>
-            </div>
-        </div>
-    </header>
-
-    <!-- Main Content -->
-    <main class="flex-grow overflow-y-auto p-4 pb-28">
-        <div class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
-            
-            <!-- Column 1: Input Pools (Tabs) -->
-            <div class="bg-surface rounded-lg shadow-md flex flex-col h-full max-h-[70vh] md:max-h-full transition-colors duration-300 border border-transparent border-default overflow-hidden">
-                
-                <!-- Tab Navigation Header -->
-                <div class="flex border-b border-default bg-surface-alt">
-                    <!-- Participants Tab -->
-                    <button id="tab-participants" onclick="switchTab('participants')" class="flex-1 py-3 px-4 text-center font-semibold text-sm transition-colors border-b-2 border-indigo-500 text-primary-accent bg-surface">
-                        Participants <span id="count-badge-p" class="ml-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs px-2 py-0.5 rounded-full">0</span>
-                    </button>
-                    <!-- Subjects Tab (Hidden initially) -->
-                    <button id="tab-subjects" onclick="switchTab('subjects')" class="hidden flex-1 py-3 px-4 text-center font-semibold text-sm transition-colors border-b-2 border-transparent text-secondary hover:text-default">
-                        Subjects <span id="count-badge-s" class="ml-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs px-2 py-0.5 rounded-full">0</span>
-                    </button>
-                </div>
-
-                <!-- List Content Area -->
-                <div class="p-4 overflow-y-auto flex-grow relative">
-                    
-                    <!-- Participants List -->
-                    <ul id="participants-list" class="space-y-2 block">
-                        <li class="text-center text-secondary italic mt-10">No participants added yet.</li>
-                    </ul>
-
-                    <!-- Subjects List -->
-                    <ul id="subjects-list" class="space-y-2 hidden">
-                        <li class="text-center text-secondary italic mt-10">No subjects added yet.</li>
-                    </ul>
-
-                </div>
-            </div>
-
-            <!-- Column 2: Shuffled Result -->
-            <div class="bg-surface rounded-lg shadow-md flex flex-col h-full max-h-[70vh] md:max-h-full transition-colors duration-300 border border-transparent border-default overflow-hidden">
-                <div class="p-4 border-b border-default bg-surface-alt rounded-t-lg">
-                    <h2 class="font-semibold text-gray-700 dark:text-gray-200">Final Order</h2>
-                </div>
-                <div class="p-4 overflow-y-auto flex-grow relative">
-                    <div id="empty-state-results" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 transition-opacity duration-300">
-                        <i class="fa-solid fa-list-ol text-4xl mb-2 opacity-20"></i>
-                        <p class="text-sm">Click "Shuffle" to see results</p>
-                    </div>
-                    <ol id="results-list" class="list-decimal list-inside space-y-2 font-medium text-gray-700 dark:text-gray-300">
-                        <!-- Results injected here -->
-                    </ol>
-                </div>
-            </div>
-
-        </div>
-    </main>
-
-    <!-- Footer Input Section -->
-    <footer class="bg-surface border-t border-default p-4 fixed bottom-0 w-full z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] transition-colors duration-300">
-        <div class="max-w-6xl mx-auto flex flex-col sm:flex-row gap-3">
-            
-            <!-- Input Container -->
-            <div class="relative flex-grow">
-                <input 
-                    type="text" 
-                    id="main-input" 
-                    placeholder="Enter participant name..." 
-                    class="w-full pl-4 pr-4 py-3 input-base focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition shadow-sm"
-                >
-                <div id="input-label" class="absolute right-3 top-3 input-label-base">
-                    Adding to: Participants
-                </div>
-            </div>
-
-            <!-- Buttons Container -->
-            <div class="flex gap-2 flex-shrink-0">
-                <button 
-                    onclick="addItem()" 
-                    class="btn-primary font-semibold py-3 px-6 rounded-lg transition transform active:scale-95 shadow-md whitespace-nowrap flex items-center justify-center"
-                >
-                    <i class="fa-solid fa-plus mr-2"></i> Add
-                </button>
-                <button 
-                    onclick="shuffle()" 
-                    class="btn-shuffle font-semibold py-3 px-6 rounded-lg transition transform active:scale-95 shadow-md whitespace-nowrap flex items-center justify-center"
-                >
-                    <i class="fa-solid fa-shuffle mr-2"></i> Shuffle
-                </button>
-                
-                <!-- Theme Toggle Button -->
-                <button 
-                    onclick="toggleTheme()" 
-                    class="btn-toggle-theme font-semibold py-3 px-4 rounded-lg transition transform active:scale-95 shadow-md flex items-center justify-center w-12"
-                    aria-label="Toggle Theme"
-                >
-                    <i id="theme-icon" class="fa-solid fa-moon"></i>
-                </button>
-            </div>
-        </div>
-    </footer>
-
-    <script>
-        // --- State ---
-        let participants = [];
-        let subjects = [];
-        let isDarkMode = false;
-        let isPairingMode = false;
-        let activeTab = 'participants'; // 'participants' or 'subjects'
-
-        // --- DOM Elements ---
-        const inputField = document.getElementById('main-input');
-        const inputLabel = document.getElementById('input-label');
-        
-        // Lists
-        const participantsListEl = document.getElementById('participants-list');
-        const subjectsListEl = document.getElementById('subjects-list');
-        const resultsListEl = document.getElementById('results-list');
-        
-        // Badges
-        const countBadgeP = document.getElementById('count-badge-p');
-        const countBadgeS = document.getElementById('count-badge-s');
-        
-        // Empty States
-        const emptyStateResults = document.getElementById('empty-state-results');
-        
-        // Theme
-        const themeIcon = document.getElementById('theme-icon');
-
-        // Tabs
-        const tabParticipants = document.getElementById('tab-participants');
-        const tabSubjects = document.getElementById('tab-subjects');
-
-        // --- Initialization ---
-        function init() {
-            initTheme();
-            renderLists();
-        }
-
-        // --- Theme Logic ---
-        function initTheme() {
-            if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.classList.add('dark');
-                isDarkMode = true;
-                themeIcon.classList.remove('fa-moon');
-                themeIcon.classList.add('fa-sun');
-            } else {
-                document.documentElement.classList.remove('dark');
-                isDarkMode = false;
-                themeIcon.classList.remove('fa-sun');
-                themeIcon.classList.add('fa-moon');
-            }
-        }
-
-        function toggleTheme() {
-            if (isDarkMode) {
-                document.documentElement.classList.remove('dark');
-                localStorage.setItem('theme', 'light');
-                themeIcon.classList.remove('fa-sun');
-                themeIcon.classList.add('fa-moon');
-                isDarkMode = false;
-            } else {
-                document.documentElement.classList.add('dark');
-                localStorage.setItem('theme', 'dark');
-                themeIcon.classList.remove('fa-moon');
-                themeIcon.classList.add('fa-sun');
-                isDarkMode = true;
-            }
-        }
-
-        // --- Tab & Mode Logic ---
-        function togglePairingMode() {
-            const toggle = document.getElementById('mode-toggle');
-            isPairingMode = toggle.checked;
-
-            if (isPairingMode) {
-                tabSubjects.classList.remove('hidden');
-            } else {
-                tabSubjects.classList.add('hidden');
-                // Force switch back to participants if subjects was active
-                if (activeTab === 'subjects') {
-                    switchTab('participants');
-                }
-            }
-            // Clear results to avoid confusion
-            resultsListEl.innerHTML = '';
-            emptyStateResults.classList.remove('hidden');
-        }
-
-        function switchTab(tab) {
-            activeTab = tab;
-            
-            // Define the new variable-based utility classes
-            const activeClasses = ['tab-active'];
-            const inactiveClasses = ['tab-inactive'];
-            
-            // Remove all old style classes (indigo-*, gray-*, bg-*) from both tabs
-            // This is the important cleanup step
-            tabParticipants.classList.remove('tab-active', 'tab-inactive', 'border-indigo-500', 'text-indigo-600', 'dark:text-indigo-400', 'bg-white', 'dark:bg-gray-800', 'border-transparent', 'text-gray-500', 'hover:text-gray-700', 'dark:text-gray-400', 'dark:hover:text-gray-200');
-            tabSubjects.classList.remove('tab-active', 'tab-inactive', 'border-indigo-500', 'text-indigo-600', 'dark:text-indigo-400', 'bg-white', 'dark:bg-gray-800', 'border-transparent', 'text-gray-500', 'hover:text-gray-700', 'dark:text-gray-400', 'dark:hover:text-gray-200');
-
-
-            if (tab === 'participants') {
-                // Style Tabs
-                tabParticipants.classList.add(...activeClasses);
-                tabSubjects.classList.add(...inactiveClasses);
-                
-                // Show/Hide Lists
-                participantsListEl.classList.remove('hidden');
-                subjectsListEl.classList.add('hidden');
-                
-                // Update Inputs
-                inputField.placeholder = "Enter participant name...";
-                inputLabel.innerText = "Adding to: Participants";
-            } else {
-                // Style Tabs
-                tabSubjects.classList.add(...activeClasses);
-                tabParticipants.classList.add(...inactiveClasses);
-                
-                // Show/Hide Lists
-                subjectsListEl.classList.remove('hidden');
-                participantsListEl.classList.add('hidden');
-                
-                // Update Inputs
-                inputField.placeholder = "Enter subject/theme...";
-                inputLabel.innerText = "Adding to: Subjects";
-            }
-            inputField.focus();
-        }
-
-        // --- Data Logic ---
-        
-        inputField.addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') addItem();
-        });
-
-        function addItem() {
-            const val = inputField.value.trim();
-            if (!val) return;
-
-            if (activeTab === 'participants') {
-                participants.push(val);
-            } else {
-                subjects.push(val);
-            }
-
-            inputField.value = '';
-            renderLists();
-            inputField.focus();
-        }
-
-        function removeItem(type, index) {
-            if (type === 'participants') {
-                participants.splice(index, 1);
-            } else {
-                subjects.splice(index, 1);
-            }
-            renderLists();
-            // Clear results if input data changes
-            resultsListEl.innerHTML = '';
-            emptyStateResults.classList.remove('hidden');
-        }
-
-        function renderLists() {
-            // Update Badges
-            countBadgeP.innerText = participants.length;
-            countBadgeS.innerText = subjects.length;
-
-            // Render Participants
-            renderUL(participantsListEl, participants, 'participants');
-            
-            // Render Subjects
-            renderUL(subjectsListEl, subjects, 'subjects');
-        }
-
-        function renderUL(el, data, type) {
-            el.innerHTML = '';
-            if (data.length === 0) {
-                const typeText = type === 'participants' ? 'participants' : 'subjects';
-                el.innerHTML = `<li class="text-center text-gray-400 dark:text-gray-500 italic mt-10">No ${typeText} added yet.</li>`;
-                return;
-            }
-
-            data.forEach((item, index) => {
-                const li = document.createElement('li');
-                li.className = 'flex justify-between items-center bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 px-4 py-3 rounded-md shadow-sm hover:border-indigo-300 dark:hover:border-indigo-500 transition-colors group';
-                li.innerHTML = `
-                    <span class="text-gray-800 dark:text-gray-100 font-medium truncate pr-4">${item}</span>
-                    <button onclick="removeItem('${type}', ${index})" class="text-gray-400 hover:text-red-500 dark:hover:text-red-400 p-1 rounded transition opacity-0 group-hover:opacity-100 focus:opacity-100" title="Remove">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
-                `;
-                el.appendChild(li);
-            });
-        }
-
-        // --- Shuffle Logic ---
-
-        function shuffleArray(array) {
-            let currentIndex = array.length, randomIndex;
-            while (currentIndex != 0) {
-                randomIndex = Math.floor(Math.random() * currentIndex);
-                currentIndex--;
-                [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
-            }
-            return array;
-        }
-
-        function shuffle() {
-            if (participants.length < 1) {
-                alert("Please add at least 1 participant to shuffle.");
-                return;
-            }
-
-            // Shuffle Participants
-            let shuffledParticipants = shuffleArray([...participants]);
-            let shuffledSubjects = [];
-
-            if (isPairingMode) {
-                if (subjects.length < 1) {
-                    // Alert optional, but let's proceed with empty subjects
-                }
-                shuffledSubjects = shuffleArray([...subjects]);
-            }
-
-            renderResults(shuffledParticipants, shuffledSubjects);
-        }
-
-        function renderResults(pList, sList) {
-            resultsListEl.innerHTML = '';
-            emptyStateResults.classList.add('hidden');
-
-            pList.forEach((name, index) => {
-                const li = document.createElement('li');
-                
-                // Rank Styling
-                const rank = index + 1;
-                let rankClasses = 'bg-button-secondary text-secondary'; // Default for > 3
-                let rowClasses = 'bg-surface border-default'; // Default row background
-
-                if(rank === 1) {
-                    rankClasses = 'bg-rank-1-bg text-rank-1-text border-rank-1-border';
-                    rowClasses = 'bg-surface border-rank-1-border shadow-sm dark:bg-surface-result-card'; 
-                } else if(rank === 2) {
-                    rankClasses = 'bg-rank-2-bg text-default border-rank-2-border';
-                    rowClasses = 'bg-surface border-rank-2-border shadow-sm dark:bg-surface-result-card';
-                } else if(rank === 3) {
-                    rankClasses = 'bg-rank-3-bg text-rank-3-text border-rank-3-border';
-                    rowClasses = 'bg-surface border-rank-3-border shadow-sm dark:bg-surface-result-card';
-                }
-
-                // Animation
-                li.style.animation = `fadeIn 0.3s ease-out ${index * 0.1}s forwards`;
-                li.style.opacity = '0'; 
-                
-                // Apply the variable-based classes for the row
-                li.className = `flex items-center border px-4 py-3 rounded-md mb-2 ${rowClasses} transition-colors`;
-                
-                // Subject Logic
-                let subjectHTML = '';
-                if (isPairingMode) {
-                    const subjectName = sList[index] || '<span class="text-secondary italic text-xs">No Subject Assigned</span>';
-                    const hasSubject = !!sList[index];
-                    
-                    // Use CSS variable for the accent color
-                    const subjectColor = hasSubject ? 'text-primary-accent' : 'text-secondary';
-                    
-                    subjectHTML = `
-                        <div class="ml-auto text-right pl-4 border-l border-default min-w-[100px] max-w-[50%]">
-                            <div class="text-[10px] uppercase tracking-wider text-secondary font-bold">Subject</div>
-                            <div class="text-sm font-semibold truncate ${subjectColor}">${subjectName}</div>
-                        </div>
-                    `;
-                }
-
-                li.innerHTML = `
-                    <div class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full ${rankClasses} font-bold mr-3 text-sm transition-colors border">
-                        ${rank}
-                    </div>
-                    <div class="flex-grow min-w-0">
-                         <span class="text-default font-medium truncate block">${name}</span>
-                    </div>
-                    ${subjectHTML}
-                `;
-                resultsListEl.appendChild(li);
-            });
-        }
-
-        function resetAll() {
-            if(confirm("Are you sure you want to clear all names and subjects?")) {
-                participants = [];
-                subjects = [];
-                inputField.value = '';
-                resultsListEl.innerHTML = '';
-                emptyStateResults.classList.remove('hidden');
-                renderLists();
-            }
-        }
-
-        // Start
-        init();
-    </script>
 </body>
 </html>
