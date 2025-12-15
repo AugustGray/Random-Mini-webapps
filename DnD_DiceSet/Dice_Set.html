@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital D&D Dice Set - Custom Theme</title>
+    
+    <!-- React & Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom Tailwind Configuration -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        c: {
+                            bg: '#212428',          // Main Background
+                            surface: '#2b3036',     // Card/Container Background (Intermediate)
+                            screen: '#15171a',      // Darker screen background
+                            btn: '#464D56',         // Button Default
+                            btnHover: '#575F6A',    // Button Hover
+                            textPri: '#E0E5EC',     // Text Primary
+                            textSec: '#CED2D9',     // Text Secondary
+                            accent: '#54C1FB',      // Accent Color
+                            accentHover: '#7CD0FC', // Lighter Accent
+                            accentDark: '#1E4258'   // Dark accent for backgrounds if needed
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        /* Custom animation for roll result */
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            70% { transform: scale(1.05); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop {
+            animation: popIn 0.2s ease-out forwards;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slide-in {
+            animation: slideIn 0.2s ease-out forwards;
+        }
+
+        /* Fade transition for view switching */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+
+        /* Hide scrollbar */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        /* Fade mask for horizontal scrolling list */
+        .mask-linear-fade {
+            mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+            -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+        }
+    </style>
+</head>
+<body class="bg-c-bg text-c-textPri min-h-screen font-sans selection:bg-c-accent selection:text-c-bg">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Dice configuration
+        const diceTypes = [
+            { id: 'd4', label: 'd4', sides: 4, type: 'standard' },
+            { id: 'd6', label: 'd6', sides: 6, type: 'standard' },
+            { id: 'd8', label: 'd8', sides: 8, type: 'standard' },
+            { id: 'd10', label: 'd10', sides: 10, type: 'standard' },
+            { id: 'd100', label: 'd%', sides: 10, type: 'percentile' },
+            { id: 'd12', label: 'd12', sides: 12, type: 'standard' },
+            { id: 'd20', label: 'd20', sides: 20, type: 'standard', spanFull: true },
+        ];
+
+        // Icon components
+        const DieIcon = ({ type }) => {
+            switch (type) {
+                case 'd4': return <svg className="w-8 h-8 mb-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 22h20L12 2z"/></svg>;
+                case 'd6': return <svg className="w-8 h-8 mb-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>;
+                case 'd8': return <svg className="w-8 h-8 mb-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2l10 10-10 10L2 12 12 2z"/></svg>;
+                case 'd10':
+                case 'd100': return <svg className="w-8 h-8 mb-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 12l10 10 10-10L12 2z" transform="scale(0.8 1) translate(3 0)"/></svg>;
+                case 'd12': return <svg className="w-8 h-8 mb-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2l8.5 6.5-3 9.5h-11l-3-9.5L12 2z"/></svg>;
+                case 'd20': return <svg className="w-8 h-8 mb-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L3 7v10l9 5 9-5V7l-9-5zM3 7l9 6 9-6M12 22V13"/></svg>;
+                default: return null;
+            }
+        };
+
+        const App = () => {
+            const [currentThrow, setCurrentThrow] = useState([]);
+            const [history, setHistory] = useState([]);
+            const [showHistory, setShowHistory] = useState(false); // Toggle between Result and History view
+            
+            const currentRollsEndRef = useRef(null);
+
+            // Calculate live sum
+            const currentTotal = currentThrow.reduce((sum, roll) => sum + roll.value, 0);
+
+            const handleRoll = (die) => {
+                // If we are looking at history, switch back to result view automatically
+                if (showHistory) setShowHistory(false);
+
+                let resultValue;
+                let displayValue;
+
+                if (die.type === 'percentile') {
+                    // 00, 10, ... 90
+                    resultValue = Math.floor(Math.random() * 10) * 10;
+                    displayValue = resultValue === 0 ? "00" : resultValue.toString();
+                } else {
+                    // 1 to N
+                    resultValue = Math.floor(Math.random() * die.sides) + 1;
+                    displayValue = resultValue.toString();
+                }
+
+                const newRoll = {
+                    id: Date.now() + Math.random(), // Unique ID for key
+                    dieLabel: die.label,
+                    value: resultValue,
+                    display: displayValue,
+                    isCrit: (die.label === 'd20' && resultValue === 20),
+                    isCritFail: (die.label === 'd20' && resultValue === 1)
+                };
+
+                setCurrentThrow(prev => [...prev, newRoll]);
+            };
+
+            // "Finish & Clear" - Moves current throw to history and resets
+            const handleFinish = () => {
+                if (currentThrow.length === 0) return;
+
+                const newHistoryEntry = {
+                    id: Date.now(),
+                    total: currentTotal,
+                    rolls: [...currentThrow], // Copy the array
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                };
+
+                setHistory(prev => [newHistoryEntry, ...prev]); // Newest first
+                setCurrentThrow([]); // Reset
+            };
+
+            // Auto-scroll the small dice history strip
+            useEffect(() => {
+                if (currentRollsEndRef.current) {
+                    currentRollsEndRef.current.scrollIntoView({ behavior: "smooth", inline: "end" });
+                }
+            }, [currentThrow]);
+
+            return (
+                <div className="flex flex-col items-center justify-center min-h-screen p-4 sm:p-6 bg-c-bg">
+                    
+                    <div className="w-full max-w-md bg-c-surface rounded-2xl shadow-2xl overflow-hidden border border-gray-700 flex flex-col h-[85vh]">
+                        
+                        {/* Header */}
+                        <div className="bg-c-surface p-4 flex justify-between items-center shrink-0 z-10 border-b border-gray-700">
+                            <div className="w-8"></div> {/* Spacer for centering */}
+                            <h1 className="text-xl font-bold tracking-wider uppercase text-c-accent drop-shadow-sm">DM's Dice Tray</h1>
+                            
+                            {/* History Toggle Button */}
+                            <button 
+                                onClick={() => setShowHistory(!showHistory)}
+                                className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors border ${showHistory ? 'bg-c-accent text-c-bg border-c-accent' : 'bg-transparent text-c-textSec border-gray-600 hover:text-c-accent hover:border-c-accent'}`}
+                                title={showHistory ? "Back to Roller" : "View History"}
+                            >
+                                {showHistory ? (
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                ) : (
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                )}
+                            </button>
+                        </div>
+
+                        {/* Top Screen Area - Swaps between Result and History */}
+                        <div className="relative bg-c-screen border-b border-gray-800 min-h-[250px] max-h-[250px] flex flex-col overflow-hidden shadow-inner">
+                            
+                            {!showHistory ? (
+                                /* --- VIEW A: Current Result Accumulator --- */
+                                <div className="flex-1 flex flex-col items-center justify-center p-6 animate-fade-in w-full h-full relative">
+                                    
+                                    {/* Small History of Current Throw */}
+                                    <div className="w-full h-10 mb-2 flex items-center overflow-x-auto no-scrollbar mask-linear-fade">
+                                        <div className="flex space-x-2 px-2 mx-auto">
+                                            {currentThrow.length === 0 ? (
+                                                <span className="text-c-textSec text-xs italic opacity-50">Tap dice to add to throw...</span>
+                                            ) : (
+                                                currentThrow.map((roll, idx) => (
+                                                    <div key={roll.id} className="animate-slide-in flex items-center bg-gray-800 rounded px-2 py-1 border border-gray-700 shrink-0">
+                                                        <span className="text-[10px] text-gray-400 mr-1 uppercase">{roll.dieLabel}:</span>
+                                                        <span className={`font-mono font-bold text-sm ${roll.isCrit ? 'text-yellow-400' : roll.isCritFail ? 'text-red-400' : 'text-c-textPri'}`}>
+                                                            {roll.display}
+                                                        </span>
+                                                    </div>
+                                                ))
+                                            )}
+                                            <div ref={currentRollsEndRef}></div>
+                                        </div>
+                                    </div>
+
+                                    {/* Big Total */}
+                                    <div className="flex-1 flex flex-col items-center justify-center mb-4">
+                                        <span className="text-c-textSec text-xs uppercase tracking-widest mb-1 opacity-70">Current Total</span>
+                                        <div key={currentThrow.length} className="animate-pop text-7xl font-black text-c-accent drop-shadow-[0_0_10px_rgba(84,193,251,0.2)]">
+                                            {currentTotal}
+                                        </div>
+                                    </div>
+
+                                    {/* Clear & Save Button */}
+                                    {currentThrow.length > 0 && (
+                                        <button 
+                                            onClick={handleFinish}
+                                            className="absolute bottom-4 right-4 bg-c-accent hover:bg-c-accentHover text-c-bg text-xs font-extrabold py-2 px-4 rounded-full transition-colors flex items-center gap-1 shadow-lg transform hover:scale-105"
+                                        >
+                                            <span>SAVE & CLEAR</span>
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+                                        </button>
+                                    )}
+                                </div>
+                            ) : (
+                                /* --- VIEW B: Saved History Log --- */
+                                <div className="flex-1 flex flex-col w-full h-full animate-fade-in bg-c-screen">
+                                    <div className="flex justify-between items-center p-3 bg-gray-900/50 border-b border-gray-800 shrink-0">
+                                        <h3 className="text-xs font-semibold text-c-textSec uppercase tracking-wider">Roll History</h3>
+                                        {history.length > 0 && (
+                                            <button 
+                                                onClick={() => setHistory([])}
+                                                className="text-[10px] text-gray-500 hover:text-red-400 transition-colors uppercase font-bold"
+                                            >
+                                                Clear History
+                                            </button>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                                        {history.length === 0 ? (
+                                            <div className="h-full flex flex-col items-center justify-center text-gray-600 text-sm italic">
+                                                <svg className="w-12 h-12 mb-2 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                <p>No saved rolls yet.</p>
+                                            </div>
+                                        ) : (
+                                            history.map((entry) => (
+                                                <div key={entry.id} className="bg-c-surface/50 p-3 rounded-lg border border-gray-800 flex justify-between items-center shadow-sm">
+                                                    <div className="flex flex-col items-start overflow-hidden mr-2">
+                                                        <span className="text-[10px] text-gray-500 mb-1">{entry.timestamp}</span>
+                                                        <div className="text-xs text-c-textSec break-words w-full leading-tight">
+                                                            {entry.rolls.map((r, i) => (
+                                                                <span key={i} className="inline-block mr-1">
+                                                                    <span className="text-gray-500">{r.dieLabel}</span>
+                                                                    <span className="text-c-textPri">({r.display})</span>
+                                                                    {i < entry.rolls.length - 1 && <span className="text-gray-600 ml-1">+</span>}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                    <div className="pl-3 border-l border-gray-700 flex flex-col items-end min-w-[3rem]">
+                                                        <span className="text-[9px] text-gray-500 uppercase">Total</span>
+                                                        <span className="font-bold text-c-accent text-xl">{entry.total}</span>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Dice Grid Controls - Always Visible */}
+                        <div className="p-4 bg-c-surface overflow-y-auto grow border-t-4 border-c-bg">
+                            <div className="grid grid-cols-2 gap-3 pb-2">
+                                {diceTypes.map((die) => (
+                                    <button
+                                        key={die.id}
+                                        onClick={() => handleRoll(die)}
+                                        className={`
+                                            ${die.spanFull ? 'col-span-2' : 'col-span-1'}
+                                            group relative
+                                            flex flex-col items-center justify-center
+                                            p-4 sm:p-5 rounded-xl
+                                            bg-c-btn hover:bg-c-btnHover active:bg-c-accent active:text-c-bg active:scale-[0.98]
+                                            border-b-4 border-gray-800 active:border-b-0 active:mt-1 active:mb-[-1px]
+                                            transition-all duration-75 ease-in-out
+                                            text-c-textPri shadow-lg
+                                        `}
+                                    >
+                                        <div className="pointer-events-none transform group-hover:scale-110 transition-transform duration-200">
+                                            <DieIcon type={die.id} />
+                                        </div>
+                                        <span className="font-bold text-lg pointer-events-none mt-1">{die.label}</span>
+                                        {die.id === 'd20' && (
+                                            <span className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-10 text-5xl font-black pointer-events-none">20</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
